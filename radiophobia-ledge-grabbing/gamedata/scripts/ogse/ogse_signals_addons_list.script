@@ -1,4 +1,4 @@
--- список явно подключаемых модулей
+﻿-- список явно подключаемых модулей
 -- здесь надо регистрировать модули, которые не будут подключаться автоматически
 -- например те, у которых имя модуля не начинается на ogse
 addons = {
@@ -27,11 +27,10 @@ addons = {
 	"ogsr_dof",
 	"PMA_escape",
 	"ogse_night_vision",
+	"ogsr_scope_nightvision",
 	"ogse_hud_control",
 	"dsh_hud_fx",
-	-- Disabled for the 3.529 boot/gameplay phase: it calls the removed
-	-- weapon:get_laser_on() method. Full add-on adaptation is deferred.
-	-- "rad_laser_control",
+	-- "zzz_bas_laser_control", -- requires removed weapon:get_laser_on() API
 	"treasure_manager",
     "task_manager",
 	"ui_inGame2_radblood",
@@ -41,7 +40,7 @@ addons = {
     "dsh_drag_drop",
     "rad_funcs",
     "rad_repair",
-    "rad_items_anims",
+    "ogsr_items_anims",
     "jr_slow_med",
 	"fakelens",
 	--"ogsr_3dss",
@@ -80,6 +79,5 @@ addons = {
 	"swm_legs",
 	"ogse_dynamic_hud",
 	"ogse_quick_slots",
-	"rad_qol_moves",
 	"ogsr_ledge_grabbing"
 }
