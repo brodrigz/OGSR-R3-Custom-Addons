@@ -10,6 +10,5 @@ all file conflicts.
 
 Install Atmospherics normally then place the contents of this patch over it.
 
-Existing saves worked can crash, new game recommended.
-back up saves before changing the weather stack. 
+Back up saves before changing the weather stack. 
 Downgrading a save after writing it with a newer engine/add-on combination is not guaranteed.
