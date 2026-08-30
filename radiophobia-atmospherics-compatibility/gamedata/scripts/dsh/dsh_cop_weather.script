@@ -444,6 +444,7 @@ end
 
 local total_debug  = false
 local always_reset = false
+local weather_save_version = 2
 
 -- если вторая граница фрейма с выбросом будет ближе пяти минут к
 -- моменту выброса, то притянуть её к этому моменту чтобы итоговый
@@ -1612,8 +1613,10 @@ end
 -- загрузка прогноза и текущего состояния из сейва
 function WeatherManager:on_load()
   ogse_surge_mgr.surge_log( "WeatherManager:on_load" )
+  self.load_version = ogse.load_var_safe( script_name() .. ".version" )
   if
     self.reset_weather
+    or self.load_version ~= weather_save_version
     or not ogse.var_exists( script_name() .. ".next_surge_time" )
   then
     ogse_surge_mgr.surge_log(
@@ -1637,7 +1640,6 @@ function WeatherManager:on_load()
     return
   end
 
-  self.load_version    = ogse.load_var_safe( script_name() .. ".version" )
   self.next_surge_time = ogse.load_var( script_name() .. ".next_surge_time" )
   for weather_name, forecast in pairs( self.forecasts ) do
     if self.load_version then
@@ -1655,7 +1657,9 @@ function WeatherManager:on_save()
   ogse.save_var(
     script_name() .. ".next_surge_time", self.next_surge_time, "time"
   )
-  ogse.save_var( script_name() .. ".version", 1, "u8" )
+  ogse.save_var(
+    script_name() .. ".version", weather_save_version, "u8"
+  )
   for weather_name, forecast in pairs( self.forecasts ) do
     forecast:save()
   end
