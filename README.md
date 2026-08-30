@@ -18,7 +18,7 @@ This does **not** include Atmospherics itself. Install Atmospherics first, then 
 
 ## Requirements
 
-* Radiophobia 3 1.20
+* [Radiophobia 3 1.20](https://www.moddb.com/mods/radiophobia/downloads/radiophobia-3-ver-120)
 * [OGSR-R3 Custom](https://github.com/brodrigz/OGSR-R3-Custom)
 
 ## Installation
