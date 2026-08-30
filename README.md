@@ -10,15 +10,11 @@ These addons are intended to extend or improve compatibility with the updated OG
 
 Adds ledge grabbing / mantling to Radiophobia 3, adapted from [Ledge-Grabbing-Mantling](https://github.com/themrdemonized/Ledge-Grabbing-Mantling).
 
-See [`radiophobia-ledge-grabbing`](./radiophobia-ledge-grabbing/) for installation details and attribution.
-
 ### Atmospherics Compatibility
 
 Compatibility overlay for **Atmospherics 2.69 RC6.5 OGSR Edition** when used with Radiophobia 3 1.20 and the updated OGSR-R3 engine.
 
 This does **not** include Atmospherics itself. Install Atmospherics first, then apply the compatibility patch.
-
-See [`radiophobia-atmospherics-compatibility`](./radiophobia-atmospherics-compatibility/) for details.
 
 ## Requirements
 
@@ -27,11 +23,11 @@ See [`radiophobia-atmospherics-compatibility`](./radiophobia-atmospherics-compat
 
 ## Installation
 
+Latest releases of the addons can be downloaded [here](https://github.com/brodrigz/OGSR-R3-Custom-Addons/releases/tag/1.0.0)
+
 Each addon is independent.
 
-Open the directory of the addon you want to use and follow its included README for installation instructions.
-
-Back up your saves and modified game files before installing compatibility patches or changing the weather stack.
+Read the install instructions in the release page.
 
 ## About
 
