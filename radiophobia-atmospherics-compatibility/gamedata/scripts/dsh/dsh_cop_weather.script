@@ -357,11 +357,35 @@ local weather_transitions_common = {
 ----------------------------------------------------
 }
 
--- Atmospherics 2.69 visual variants.  Existing logical keys are preserved for
--- forecast persistence; the additional keys only select further ordinary cycles.
-local atmospherics_variant_groups = {
-  clear = { "clear", "clear2", "clear3", "clear4", "swtc", "partly3", "partly4" },
+-- The stock transition table names five cycles as "clear", even though clear4
+-- and swtc use overcast partly-weather assets.  Keep those legacy names only
+-- while reducing the original transition weights to logical families.  Visual
+-- selection below uses an honest classification, so a clear forecast is dry
+-- and visibly clear.
+local legacy_transition_groups = {
+  clear = { "clear", "clear2", "clear3", "clear4", "swtc" },
   cloudy = { "cloudy", "cloudy2", "cloudy2rm", "cloudy3", "cloudy4", "swtc_dark" },
+  rain = { "rain" },
+  rain_thun = { "rain_thun" },
+  foggy = { "foggy", "foggy_ns", "veryfoggy" },
+}
+
+local legacy_group_by_key = {}
+for group, variants in pairs(legacy_transition_groups) do
+  for _, variant in ipairs(variants) do
+    legacy_group_by_key[variant] = group
+  end
+end
+
+-- Atmospherics visual cycles, classified by what the player actually sees.
+-- w_partly4's light drizzle remains authored content, but it is no longer
+-- presented as a clear cycle.
+local atmospherics_variant_groups = {
+  clear = { "clear", "clear2", "clear3" },
+  cloudy = {
+    "cloudy", "cloudy2", "cloudy2rm", "cloudy3", "cloudy4", "swtc_dark",
+    "clear4", "swtc", "partly3", "partly4",
+  },
   rain = { "rain", "rain2", "rain3", "rain4" },
   rain_thun = { "rain_thun", "storm2", "storm3" },
   foggy = { "foggy", "foggy_ns", "veryfoggy" },
@@ -374,51 +398,111 @@ for group, variants in pairs(atmospherics_variant_groups) do
   end
 end
 
--- Preserve the original group weights, then distribute each group's weight
--- across its visual variants.  New variant sources inherit the same transition
--- table and wind/end-duration policy as their original DSH weather family.
-for _, source in pairs(weather_transitions_common) do
+-- Retain the shape of Radiophobia's transition graph while making dry weather
+-- the plurality and storms exceptional.  Variant count never affects these
+-- family weights.
+local destination_weight_scale = {
+  clear = 1.25,
+  cloudy = 1.00,
+  rain = 0.75,
+  rain_thun = 0.50,
+  foggy = 1.00,
+}
+
+local grouped_transition_tables = {}
+for source_name, source in pairs(weather_transitions_common) do
   local grouped_weights = {}
   for destination, weight in pairs(source.tr_w) do
-    local group = atmospherics_group_by_key[destination] or destination
-    grouped_weights[group] = (grouped_weights[group] or 0) + weight
+    local group = legacy_group_by_key[destination] or destination
+    local scale = destination_weight_scale[group] or 1
+    grouped_weights[group] = (grouped_weights[group] or 0) + weight * scale
   end
+  grouped_transition_tables[source_name] = grouped_weights
+end
 
-  local expanded = {}
-  for group, weight in pairs(grouped_weights) do
-    local variants = atmospherics_variant_groups[group]
-    if variants then
-      local share = weight / #variants
-      for _, variant in ipairs(variants) do
-        expanded[variant] = share
-      end
-    else
-      expanded[group] = weight
+local weather_family_policies = {
+  clear = {
+    template = "clear",
+    wind_velocity = wind_velocity_settings.clear,
+    end_w = function() return math.random(4, 7) end,
+  },
+  cloudy = {
+    template = "cloudy",
+    wind_velocity = wind_velocity_settings.cloudy,
+    end_w = function() return math.random(3, 5) end,
+  },
+  rain = {
+    template = "rain",
+    wind_velocity = wind_velocity_settings.rain,
+    end_w = function() return math.random(4, 6) end,
+  },
+  rain_thun = {
+    template = "rain_thun",
+    wind_velocity = wind_velocity_settings.rain_thun,
+    end_w = function() return math.random(3, 4) end,
+  },
+  foggy = {
+    template = "foggy",
+    wind_velocity = wind_velocity_settings.foggy,
+    end_w = function() return math.random(1, 3) end,
+  },
+}
+
+for group, variants in pairs(atmospherics_variant_groups) do
+  local policy = weather_family_policies[group]
+  for _, variant in ipairs(variants) do
+    weather_transitions_common[variant] = {
+      family = group,
+      wind_velocity = policy.wind_velocity,
+      end_w = policy.end_w(),
+      tr_w = grouped_transition_tables[policy.template],
+    }
+  end
+end
+
+-- New forecasts favor a dry opening without making the Zone uniformly sunny:
+-- 45% clear, 30% cloudy, 10% rain, 5% storm, and 10% fog.
+local initial_weather_family_weights = {
+  clear = 9,
+  cloudy = 6,
+  rain = 2,
+  rain_thun = 1,
+  foggy = 2,
+}
+
+local function choose_weighted_name(weights)
+  local total = 0
+  for _, weight in pairs(weights) do
+    total = total + weight
+  end
+  ASSERT(total > 0, "[%s]: weighted choice has no positive weights", script_name())
+
+  local value = math.random() * total
+  local fallback
+  for name, weight in pairs(weights) do
+    fallback = name
+    value = value - weight
+    if value <= 0 then
+      return name
     end
   end
-  source.tr_w = expanded
+  return fallback
 end
 
-local function add_atmospherics_variant(variant, template_key)
-  local template = weather_transitions_common[template_key]
-  local transitions = {}
-  for destination, weight in pairs(template.tr_w) do
-    transitions[destination] = weight
+local function choose_family_variant(group, available_cycles)
+  local available = {}
+  for _, variant in ipairs(atmospherics_variant_groups[group] or {}) do
+    if not available_cycles or available_cycles[variant] then
+      table.insert(available, variant)
+    end
   end
-  weather_transitions_common[variant] = {
-    wind_velocity = template.wind_velocity,
-    end_w = template.end_w,
-    tr_w = transitions,
-  }
+  ASSERT(
+    table.getn(available) > 0,
+    "[%s]: weather family %s has no available cycles",
+    script_name(), tostring(group)
+  )
+  return available[math.random(table.getn(available))]
 end
-
-add_atmospherics_variant("partly3", "clear")
-add_atmospherics_variant("partly4", "clear")
-add_atmospherics_variant("rain2", "rain")
-add_atmospherics_variant("rain3", "rain")
-add_atmospherics_variant("rain4", "rain")
-add_atmospherics_variant("storm2", "rain_thun")
-add_atmospherics_variant("storm3", "rain_thun")
 
 local weather_transitions = {
   [ "default" ] = weather_transitions_common,
@@ -444,7 +528,7 @@ end
 
 local total_debug  = false
 local always_reset = false
-local weather_save_version = 2
+local weather_save_version = 3
 
 -- если вторая граница фрейма с выбросом будет ближе пяти минут к
 -- моменту выброса, то притянуть её к этому моменту чтобы итоговый
@@ -1075,7 +1159,12 @@ function StaticForecast:update( next_surge_time )
       table.getn( self.idx2cycle ) > 0,
       "[%s]: self.idx2cycle is empty", script_name()
     )
-    local cycle_name = self.idx2cycle[ math.random( table.getn( self.idx2cycle ) ) ]
+    local cycle_name
+    if self.choose_initial_cycle then
+      cycle_name = self:choose_initial_cycle()
+    else
+      cycle_name = self.idx2cycle[ math.random( table.getn( self.idx2cycle ) ) ]
+    end
     ASSERT(
       self.cycles[ cycle_name ],
       "[%s]: %s not found", script_name(), tostring( cycle_name )
@@ -1338,6 +1427,21 @@ function DynamicForecast:__init( weather_name, weather_transitions )
 end
 
 
+function DynamicForecast:choose_initial_cycle()
+  local available_weights = {}
+  for group, weight in pairs(initial_weather_family_weights) do
+    for _, variant in ipairs(atmospherics_variant_groups[group]) do
+      if self.cycles[variant] then
+        available_weights[group] = weight
+        break
+      end
+    end
+  end
+  local group = choose_weighted_name(available_weights)
+  return choose_family_variant(group, self.cycles)
+end
+
+
 function DynamicForecast:load()
   ogse_surge_mgr.surge_log( "DynamicForecast:load" )
   local prefix = string.format(
@@ -1442,7 +1546,10 @@ function DynamicForecast:append_forecast_point( day_start_time, frame_point_data
   if prev_last_point then
     ogse_surge_mgr.surge_log( "update self.last_weather_time" )
     -- длительность цикла в минутах
-    if cycle_name == prev_last_point.cycle then
+    local current_family = atmospherics_group_by_key[cycle_name] or cycle_name
+    local previous_family = atmospherics_group_by_key[prev_last_point.cycle]
+      or prev_last_point.cycle
+    if current_family == previous_family then
       self.last_weather_time = self.last_weather_time + 1
     else
       self.last_weather_time = 1
@@ -1468,26 +1575,10 @@ function DynamicForecast:aux_choose_next_weather()
   if math.random() > trans_prob then -- если ещё рано
     return last_point.cycle
   end
-  -- составляем таблицу весов только для переходов, которые доступны
-  -- из текущего
-  local weight_scales = {}
-  local wsum          = 0
-  for cycle_name, weight in pairs( wtr.tr_w ) do
-    -- перебираем все варианты, доступные из текущего цикла
-    wsum = wsum + weight
-    table.insert( weight_scales, { cycle_name, weight } )
-  end
-  table.sort( weight_scales, function( a, b ) return a[ 2 ] > b[ 2 ] end )
-  -- выбираем следующий цикл
-  local next_cycle
-  local rand_val = math.random( wsum )
-  for _, trw in ipairs( weight_scales ) do
-    rand_val = rand_val - trw[ 2 ]
-    if rand_val <= 0 then
-      next_cycle = trw[ 1 ]
-      break
-    end
-  end
+  -- Select a logical family first and a visual variant second.  This keeps
+  -- family probability and duration independent of how many visuals it owns.
+  local next_group = choose_weighted_name(wtr.tr_w)
+  local next_cycle = choose_family_variant(next_group, self.cycles)
   ogse_surge_mgr.surge_log( "DynamicForecast:aux_choose_next_weather - END" )
   return next_cycle
 end
