@@ -1,0 +1,264 @@
+--Меню настроек геймплея. Используется скриптом ui_mm_opt_main.script
+
+class "opt_gameplay" (CUIWindow)
+function opt_gameplay:__init() super()
+end
+
+function opt_gameplay:__finalize()
+end
+
+function opt_gameplay:InitControls(x, y, xml, handler)
+	self:Init(x, y, 738, 416)
+	self:SetAutoDelete(true)
+
+	xml:InitFrame("frame", self)
+
+	xml:InitStatic("tab_gameplay:list_difficulty_cap", self)
+	xml:InitStatic("tab_gameplay:list_economy_cap", self)
+
+	xml:InitCheck("tab_gameplay:check_autopause", self)
+	xml:InitCheck("tab_gameplay:check_tips", self)
+	xml:InitCheck("tab_gameplay:check_crosshair", self)
+	xml:InitCheck("tab_gameplay:check_dist", self)
+	xml:InitCheck("tab_gameplay:check_ambient", self)
+	xml:InitCheck("tab_gameplay:check_3d_pda", self)
+	xml:InitCheck("tab_gameplay:check_crosshair_hard", self)
+	xml:InitCheck("tab_gameplay:check_aim_toggle", self)
+	xml:InitCheck("tab_gameplay:check_switch_slot", self)
+	xml:InitCheck("tab_gameplay:check_auto_aim_zoom", self)
+	xml:InitCheck("tab_gameplay:check_late_reload", self)
+	xml:InitCheck("tab_gameplay:check_lean_toggle", self)
+	
+	-- Item use animations
+	use_anims = xml:InitCheck("tab_gameplay:check_use_anims", self)
+	handler:Register(use_anims, "use_anims")
+	use_anims:SetCheck(ui_data.load("rad3_use_anims"))
+	handler:AddCallback("use_anims", ui_events.BUTTON_CLICKED, self.UseAnims, self)
+	
+	-- Mutant part harvest animations
+	harvest_anim = xml:InitCheck("tab_gameplay:check_harvest_anim", self)
+	handler:Register(harvest_anim, "harvest_anim")
+	harvest_anim:SetCheck(ui_data.load("rad3_harvest_anim"))
+	handler:AddCallback("harvest_anim", ui_events.BUTTON_CLICKED, self.HarvestAnim, self)
+	
+	-- Spawn mutants after blowout
+	mutants_after_blowout = xml:InitCheck("tab_gameplay:check_mutants_after_blowout", self)
+	handler:Register(mutants_after_blowout, "mutants_after_blowout")
+	mutants_after_blowout:SetCheck(ui_data.load("rad3_mutants_after_blowout"))
+	handler:AddCallback("mutants_after_blowout", ui_events.BUTTON_CLICKED, self.MutantsAfterBlowout, self)
+	
+	-- Gasmask breathing sound
+	gasmask_breath_snd = xml:InitCheck("tab_gameplay:check_gasmask_breath_snd", self)
+	handler:Register(gasmask_breath_snd, "gasmask_breath_snd")
+	gasmask_breath_snd:SetCheck(ui_data.load("rad3_gasmask_breath_snd"))
+	handler:AddCallback("gasmask_breath_snd", ui_events.BUTTON_CLICKED, self.GasmaskBreathSnd, self)
+	
+	-- Shader based 2D scopes
+	fakelens = xml:InitCheck("tab_gameplay:check_fakelens", self)
+	handler:Register(fakelens, "fakelens")
+	fakelens:SetCheck(ui_data.load("rad3_fakelens"))
+	handler:AddCallback("fakelens", ui_events.BUTTON_CLICKED, self.Fakelens, self)
+	
+	-- First person legs
+	legs = xml:InitCheck("tab_gameplay:check_legs", self)
+	handler:Register(legs, "legs")
+	legs:SetCheck(ui_data.load("rad3_legs"))
+	handler:AddCallback("legs", ui_events.BUTTON_CLICKED, self.Legs, self)
+	
+	-- Dynamic news
+	dynamic_news = xml:InitCheck("tab_gameplay:check_dynamic_news", self)
+	handler:Register(dynamic_news, "dynamic_news")
+	dynamic_news:SetCheck(ui_data.load("rad3_dynamic_news"))
+	handler:AddCallback("dynamic_news", ui_events.BUTTON_CLICKED, self.DynamicNews, self)
+	
+	-- Auto-unload picked up weapons
+	autounload_wpn = xml:InitCheck("tab_gameplay:check_autounload_wpn", self)
+	handler:Register(autounload_wpn, "autounload_wpn")
+	autounload_wpn:SetCheck(ui_data.load("rad3_autounload_wpn"))
+	handler:AddCallback("autounload_wpn", ui_events.BUTTON_CLICKED, self.AutounloadWpn, self)
+
+	-- Backpack open/close HUD animation (Seb's Pack)
+	backpack_anim = xml:InitCheck("tab_gameplay:check_backpack_anim", self)
+	handler:Register(backpack_anim, "backpack_anim")
+	backpack_anim:SetCheck(ui_data.load("rad3_backpack_anim"))
+	handler:AddCallback("backpack_anim", ui_events.BUTTON_CLICKED, self.BackpackAnim, self)
+	
+	-- Pickup animation
+	pickup_anim = xml:InitCheck("tab_gameplay:check_pickup_anim", self)
+	handler:Register(pickup_anim, "pickup_anim")
+	pickup_anim:SetCheck(ui_data.load("rad3_pickup_anim"))
+	handler:AddCallback("pickup_anim", ui_events.BUTTON_CLICKED, self.PickupAnim, self)
+	
+	-- Hit sounds
+	hit_snd = xml:InitCheck("tab_gameplay:check_hit_snd", self)
+	handler:Register(hit_snd, "hit_snd")
+	hit_snd:SetCheck(ui_data.load("rad3_hit_snd"))
+	handler:AddCallback("hit_snd", ui_events.BUTTON_CLICKED, self.HitSnd, self)
+	
+	-- Task autosave
+	task_autosave = xml:InitCheck("tab_gameplay:check_task_autosave", self)
+	handler:Register(task_autosave, "task_autosave")
+	task_autosave:SetCheck(ui_data.load("rad3_task_autosave"))
+	handler:AddCallback("task_autosave", ui_events.BUTTON_CLICKED, self.TaskAutosave, self)
+
+	xml:InitStatic("tab_gameplay:cap_font_scale_x", self)
+	xml:InitTrackBar("tab_gameplay:track_font_scale_x", self)
+	xml:InitStatic("tab_gameplay:cap_font_scale_y", self)
+	xml:InitTrackBar("tab_gameplay:track_font_scale_y", self)
+
+	xml:InitStatic("tab_gameplay:cap_font_scale_x", self)
+	xml:InitTrackBar("tab_gameplay:track_font_scale_x", self)
+	xml:InitStatic("tab_gameplay:cap_font_scale_y", self)
+	xml:InitTrackBar("tab_gameplay:track_font_scale_y", self)
+
+	list_difficulty = xml:InitComboBox("tab_gameplay:list_difficulty", self)
+	list_difficulty:SetAutoDelete(true)
+	handler:Register(list_difficulty, "list_difficulty")
+	handler:AddCallback("list_difficulty", ui_events.LIST_ITEM_SELECT, self.DifficultySelect, self)
+	
+	list_economy = xml:InitComboBox("tab_gameplay:list_economy", self)
+	list_economy:SetAutoDelete(true)
+	handler:Register(list_economy, "list_economy")
+	handler:AddCallback("list_economy", ui_events.LIST_ITEM_SELECT, self.EconomySelect, self)
+end
+
+function opt_gameplay:DifficultySelect()
+	local diff_id = list_difficulty:CurrentID() + 1
+	get_console():execute("g_rad3_game_diff gdiff_" .. diff_id)
+	game_difficulties.set_game_factor("type", diff_id)
+end
+
+function opt_gameplay:EconomySelect()
+	local diff_id = list_economy:CurrentID() + 1
+	get_console():execute("g_rad3_economy_diff econ_" .. diff_id)
+	game_difficulties.set_eco_factor("type", diff_id)
+end
+
+function opt_gameplay:UseAnims()
+	use_anims:SetCheck(ui_data.load("rad3_use_anims"))
+	if use_anims:GetCheck() then
+		ui_data.save("rad3_use_anims", false)
+		use_anims:SetCheck(false) else 
+		ui_data.save("rad3_use_anims", true)
+		use_anims:SetCheck(true)
+	end
+end
+
+function opt_gameplay:PickupAnim()
+	pickup_anim:SetCheck(ui_data.load("rad3_pickup_anim"))
+	if pickup_anim:GetCheck() then
+		ui_data.save("rad3_pickup_anim", false)
+		pickup_anim:SetCheck(false) else 
+		ui_data.save("rad3_pickup_anim", true)
+		pickup_anim:SetCheck(true)
+	end
+end
+
+function opt_gameplay:HarvestAnim()
+	harvest_anim:SetCheck(ui_data.load("rad3_harvest_anim"))
+	if harvest_anim:GetCheck() then
+		ui_data.save("rad3_harvest_anim", false)
+		harvest_anim:SetCheck(false) else 
+		ui_data.save("rad3_harvest_anim", true)
+		harvest_anim:SetCheck(true)
+	end
+end
+
+function opt_gameplay:MutantsAfterBlowout()
+	mutants_after_blowout:SetCheck(ui_data.load("rad3_mutants_after_blowout"))
+	if mutants_after_blowout:GetCheck() then
+		ui_data.save("rad3_mutants_after_blowout", false)
+		mutants_after_blowout:SetCheck(false) else 
+		ui_data.save("rad3_mutants_after_blowout", true)
+		mutants_after_blowout:SetCheck(true)
+	end
+end
+
+function opt_gameplay:GasmaskBreathSnd()
+	gasmask_breath_snd:SetCheck(ui_data.load("rad3_gasmask_breath_snd"))
+	if gasmask_breath_snd:GetCheck() then
+		ui_data.save("rad3_gasmask_breath_snd", false)
+		gasmask_breath_snd:SetCheck(false) else 
+		ui_data.save("rad3_gasmask_breath_snd", true)
+		gasmask_breath_snd:SetCheck(true)
+	end
+end
+
+function opt_gameplay:Fakelens()
+	fakelens:SetCheck(ui_data.load("rad3_fakelens"))
+	if fakelens:GetCheck() then
+		ui_data.save("rad3_fakelens", false)
+		fakelens:SetCheck(false) else 
+		ui_data.save("rad3_fakelens", true)
+		fakelens:SetCheck(true)
+	end
+end
+
+function opt_gameplay:Legs()
+	legs:SetCheck(ui_data.load("rad3_legs"))
+	if legs:GetCheck() then
+		ui_data.save("rad3_legs", false)
+		legs:SetCheck(false) else 
+		ui_data.save("rad3_legs", true)
+		legs:SetCheck(true)
+	end
+end
+
+function opt_gameplay:DynamicNews()
+	dynamic_news:SetCheck(ui_data.load("rad3_dynamic_news"))
+	if dynamic_news:GetCheck() then
+		ui_data.save("rad3_dynamic_news", false)
+		dynamic_news:SetCheck(false) else 
+		ui_data.save("rad3_dynamic_news", true)
+		dynamic_news:SetCheck(true)
+	end
+end
+
+function opt_gameplay:AutounloadWpn()
+	autounload_wpn:SetCheck(ui_data.load("rad3_autounload_wpn"))
+	if autounload_wpn:GetCheck() then
+		ui_data.save("rad3_autounload_wpn", false)
+		autounload_wpn:SetCheck(false) else 
+		ui_data.save("rad3_autounload_wpn", true)
+		autounload_wpn:SetCheck(true)
+	end
+end
+
+function opt_gameplay:BackpackAnim()
+	backpack_anim:SetCheck(ui_data.load("rad3_backpack_anim"))
+	if backpack_anim:GetCheck() then
+		ui_data.save("rad3_backpack_anim", false)
+		backpack_anim:SetCheck(false) else
+		ui_data.save("rad3_backpack_anim", true)
+		backpack_anim:SetCheck(true)
+	end
+end
+
+function opt_gameplay:HitSnd()
+	hit_snd:SetCheck(ui_data.load("rad3_hit_snd"))
+	if hit_snd:GetCheck() then
+		ui_data.save("rad3_hit_snd", false)
+		hit_snd:SetCheck(false) else 
+		ui_data.save("rad3_hit_snd", true)
+		hit_snd:SetCheck(true)
+	end
+end
+
+function opt_gameplay:TaskAutosave()
+	task_autosave:SetCheck(ui_data.load("rad3_task_autosave"))
+	if task_autosave:GetCheck() then
+		ui_data.save("rad3_task_autosave", false)
+		task_autosave:SetCheck(false) else 
+		ui_data.save("rad3_task_autosave", true)
+		task_autosave:SetCheck(true)
+	end
+end
+
+class "text_item" (CUIListItemEx)
+function text_item:__init() super()
+	self.fn= CUIStatic()
+	self.fn:SetTextColor(255, 184, 184, 184)
+	self.fn:SetAutoDelete(true)
+	self:AttachChild(self.fn)
+	self.fn:SetText("item")
+end

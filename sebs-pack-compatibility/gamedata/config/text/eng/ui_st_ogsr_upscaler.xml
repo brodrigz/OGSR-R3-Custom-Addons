@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="windows-1251" ?>
+<string_table>
+	<string id="st_opt_taa">
+		<text>TAA</text>
+	</string>
+	<string id="ui_mm_dlss_quality">
+		<text>DLSS quality</text>
+	</string>
+	<string id="ui_mm_fsr3_quality">
+		<text>FSR 3 quality</text>
+	</string>
+	<string id="st_opt_dlaa">
+		<text>DLAA</text>
+	</string>
+	<string id="st_opt_dlss_quality">
+		<text>Quality</text>
+	</string>
+	<string id="st_opt_dlss_balanced">
+		<text>Balanced</text>
+	</string>
+	<string id="st_opt_dlss_performance">
+		<text>Performance</text>
+	</string>
+	<string id="st_opt_dlss_ultra_performance">
+		<text>Ultra Performance</text>
+	</string>
+	<string id="st_opt_fsr3_native_aa">
+		<text>Native AA</text>
+	</string>
+	<string id="st_opt_fsr3_quality">
+		<text>Quality</text>
+	</string>
+	<string id="st_opt_fsr3_balanced">
+		<text>Balanced</text>
+	</string>
+	<string id="st_opt_fsr3_performance">
+		<text>Performance</text>
+	</string>
+	<string id="st_opt_fsr3_ultra_performance">
+		<text>Ultra Performance</text>
+	</string>
+	<string id="video_settings_name_70">
+		<text>DLSS quality - r_aa_dlss_quality</text>
+	</string>
+	<string id="video_settings_name_71">
+		<text>FSR 3 quality - r_aa_fsr3_quality</text>
+	</string>
+	<string id="video_settings_desc_70">
+		<text>Sets the NVIDIA DLSS internal render scale. DLAA renders at native resolution. Quality, Balanced, Performance and Ultra Performance use progressively lower internal resolutions to gain FPS. Applying this setting recreates video resources.</text>
+	</string>
+	<string id="video_settings_desc_71">
+		<text>Sets the AMD FSR 3 internal render scale. Native AA renders at native resolution. Quality, Balanced, Performance and Ultra Performance use progressively lower internal resolutions to gain FPS. Applying this setting recreates video resources.</text>
+	</string>
+</string_table>

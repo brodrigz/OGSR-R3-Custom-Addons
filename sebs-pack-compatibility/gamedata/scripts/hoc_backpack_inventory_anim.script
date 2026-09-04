@@ -1,0 +1,506 @@
+-- -*- mode: lua; coding: windows-1251-dos -*-
+
+local cfg = ini_file("configs\\items\\items\\mod_animations_settings_zzzz_hoc_backpack.ltx")
+if not (cfg and cfg:section_exist("backpack_open")) then
+    cfg = ini_file("configs\\items\\items\\mod_animations_settings_hoc_backpack.ltx")
+end
+local current_snd = nil
+local detector_model_hidden = false
+local hidden_detector_ids = {}
+local detector_slots = { 8, 12, 13 }
+local slot_before_inventory_anim = nil
+local forced_inventory_holster = false
+
+local function clear_hidden_detector_ids()
+    for i = 1, #hidden_detector_ids do
+        hidden_detector_ids[i] = nil
+    end
+end
+
+local function is_detector_item(item)
+    return item and item:section() and string.find(item:section(), "detector", 1, true) ~= nil
+end
+
+local function resolve_restore_slot(active_slot)
+    if active_slot and active_slot ~= 0 and active_slot ~= 255 then
+        return active_slot
+    end
+
+    return nil
+end
+
+local function refresh_saved_restore_slot_from_active()
+    if not db.actor then
+        return
+    end
+
+    local current_slot = resolve_restore_slot(db.actor:active_slot())
+    if current_slot then
+        slot_before_inventory_anim = current_slot
+        ogse.save_var("slot_before_inventory_anim", current_slot)
+    end
+end
+
+local function get_actor_obj_safe()
+    if not get_actor_obj then
+        return nil
+    end
+    return get_actor_obj()
+end
+
+local function hide_detector_item(detector_item)
+    if not is_detector_item(detector_item) then
+        return
+    end
+
+    detector_item:enable_attachable_item(false)
+    detector_model_hidden = true
+    hidden_detector_ids[#hidden_detector_ids + 1] = detector_item:id()
+end
+
+local function restore_detector_item(detector_item)
+    if is_detector_item(detector_item) then
+        detector_item:enable_attachable_item(true)
+    end
+end
+
+-- If the engine just auto-equipped an item into the active slot (e.g. the
+-- player dragged something into an equipment slot while the
+-- inventory/backpack is open), forcibly hiding its attachable model mid-draw
+-- desyncs the engine's HUD item state machine and can permanently block
+-- weapon switching until the item is removed from the inventory. Cleanly
+-- holster it through the normal engine call instead, and let the existing
+-- restore-slot machinery redraw whatever was active before once the
+-- inventory closes.
+--
+-- only_detectors=true restricts this to detector items only (safe to run
+-- unconditionally on every inventory-open tick, since it only ever touches
+-- an item type known to cause this). only_detectors=false covers ANY item
+-- type, and must only be called in direct response to an actual slot-change
+-- event (on_item_to_slot/on_item_to_ruck/on_drop) — never from the
+-- inventory-open path, since that would also un-equip whatever the player
+-- was legitimately already holding before opening the inventory (the
+-- "Removed gun holster/draw logic" this file used to have, and shouldn't
+-- bring back).
+local function deactivate_newly_active_item_if_needed(only_detectors)
+    if not db.actor or not db.actor:has_info("ui_inventory") then
+        return
+    end
+
+    local active_slot = db.actor:active_slot()
+    if not active_slot or active_slot == 255 then
+        return
+    end
+
+    local item = db.actor:item_in_slot(active_slot)
+    if only_detectors and not is_detector_item(item) then
+        return
+    end
+
+    -- Prefer restoring whatever was active before this item barged in (a
+    -- known-good, already-rendered state) over going to "no active item"
+    -- (255) here, which this pack doesn't render cleanly while the
+    -- backpack overlay is up (the left arm goes missing).
+    local restore_to = slot_before_inventory_anim
+    if restore_to == active_slot then
+        restore_to = nil
+    end
+    db.actor:activate_slot(restore_to or 255)
+    forced_inventory_holster = true
+end
+
+local function ensure_detector_model_hidden()
+    if not db.actor then
+        return
+    end
+
+    local actor_obj = get_actor_obj_safe()
+    if not actor_obj then
+        return
+    end
+
+    local ok, err = pcall(deactivate_newly_active_item_if_needed, true)
+    if not ok then
+        log1("!hoc_backpack_inventory_anim: deactivate_newly_active_item_if_needed failed: " .. tostring(err))
+    end
+
+    if not actor_obj:IsDetectorActive() then
+        return
+    end
+
+    detector_model_hidden = false
+    clear_hidden_detector_ids()
+
+    for i = 1, #detector_slots do
+        hide_detector_item(db.actor:item_in_slot(detector_slots[i]))
+    end
+
+    local active_slot = db.actor:active_slot()
+    if active_slot then
+        hide_detector_item(db.actor:item_in_slot(active_slot))
+    end
+end
+
+local function restore_detector_model_if_needed()
+    if not detector_model_hidden then
+        return
+    end
+
+    for i = 1, #hidden_detector_ids do
+        local detector_item = level.object_by_id(hidden_detector_ids[i])
+        if detector_item then
+            detector_item:enable_attachable_item(true)
+        end
+    end
+
+    if db.actor then
+        for i = 1, #detector_slots do
+            restore_detector_item(db.actor:item_in_slot(detector_slots[i]))
+        end
+    end
+
+    local active_slot = db.actor and db.actor:active_slot() or nil
+    if active_slot then
+        restore_detector_item(db.actor:item_in_slot(active_slot))
+    end
+
+    detector_model_hidden = false
+    clear_hidden_detector_ids()
+end
+
+local function clear_inventory_restore_state()
+    forced_inventory_holster = false
+    slot_before_inventory_anim = nil
+end
+
+-- Public function to forcibly restore weapon slot and clear holster state.
+-- Keep this global: other scripts or debug console calls may use it directly.
+function force_restore_weapon_slot()
+    if db.actor and forced_inventory_holster and slot_before_inventory_anim and slot_before_inventory_anim ~= 255 then
+        db.actor:activate_slot(slot_before_inventory_anim)
+    end
+    clear_inventory_restore_state()
+end
+
+local function restore_inventory_slot_if_safe(retries)
+    if not db.actor then
+        clear_inventory_restore_state()
+        return
+    end
+
+    if db.actor:has_info("ui_inventory") then
+        if retries > 0 then
+            dsh.timeout(100, function()
+                restore_inventory_slot_if_safe(retries - 1)
+            end)
+        else
+            clear_inventory_restore_state()
+        end
+        return
+    end
+
+    if db.actor:has_info("anim_action") or ogse.load_var_safe("hoc_item_anim_lock") or level.only_movekeys_allowed() then
+        if retries > 0 then
+            dsh.timeout(100, function()
+                restore_inventory_slot_if_safe(retries - 1)
+            end)
+        else
+            clear_inventory_restore_state()
+        end
+        return
+    end
+
+    if not (forced_inventory_holster and slot_before_inventory_anim and slot_before_inventory_anim ~= 255) then
+        clear_inventory_restore_state()
+        return
+    end
+
+    local target_slot = slot_before_inventory_anim
+
+    local function verify_slot_restored(verify_retries)
+        if not db.actor then
+            clear_inventory_restore_state()
+            return
+        end
+
+        if db.actor:has_info("ui_inventory") then
+            if verify_retries > 0 then
+                dsh.timeout(100, function()
+                    verify_slot_restored(verify_retries - 1)
+                end)
+            else
+                clear_inventory_restore_state()
+            end
+            return
+        end
+
+        if db.actor:active_slot() == target_slot then
+            clear_inventory_restore_state()
+            return
+        end
+
+        if db.actor:has_info("anim_action") or ogse.load_var_safe("hoc_item_anim_lock") or level.only_movekeys_allowed() then
+            if verify_retries > 0 then
+                dsh.timeout(120, function()
+                    verify_slot_restored(verify_retries - 1)
+                end)
+            else
+                clear_inventory_restore_state()
+            end
+            return
+        end
+
+        db.actor:activate_slot(target_slot)
+
+        if verify_retries > 0 then
+            dsh.timeout(120, function()
+                verify_slot_restored(verify_retries - 1)
+            end)
+        else
+            clear_inventory_restore_state()
+        end
+    end
+
+    -- Use normal slot activation so engine plays the draw animation.
+    db.actor:activate_slot(target_slot)
+    dsh.timeout(120, function()
+        verify_slot_restored(12)
+    end)
+end
+
+-- Lets players fully disable this whole feature from Options > Game if it
+-- misbehaves for them (see the "Backpack Open/Close Animation" checkbox).
+local function is_backpack_anim_enabled()
+    if not (ui_data and ui_data.load) then
+        return true
+    end
+    local enabled = ui_data.load("rad3_backpack_anim")
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+local function get_actor_community()
+    local actor_sect = db.actor and db.actor:section()
+    local community = actor_sect and SYS_GetParam(0, actor_sect, "community", nil)
+    if not community or community == "" then
+        return "stalker"
+    end
+    return community
+end
+
+local function cfg_string(section, key, default)
+    if cfg and cfg:section_exist(section) and cfg:line_exist(section, key) then
+        return cfg:r_string(section, key)
+    end
+    local ini_val = SYS_GetParam(0, section, key, nil)
+    if ini_val then
+        return ini_val
+    end
+    return default
+end
+
+local function pick_hud_section(kind)
+    local community = get_actor_community()
+    local candidate = string.format("item_ea_backpack_%s_%s_hud", kind, community)
+
+    if SYS_GetParam(0, candidate, "anm_ea_show", nil) then
+        return candidate
+    end
+
+    local fallback = string.format("item_ea_backpack_%s_hud", kind)
+    if SYS_GetParam(0, fallback, "anm_ea_show", nil) then
+        return fallback
+    end
+
+    return nil
+end
+
+local function play_backpack(kind)
+    if not db.actor or not db.actor:alive() then
+        return
+    end
+
+    local hud_section = pick_hud_section(kind)
+    if not hud_section then
+        return
+    end
+
+    local anim_group = "backpack_" .. kind
+    local snd = cfg_string(anim_group, "snd", nil)
+    local cam = cfg_string(anim_group, "cam", nil)
+
+    if current_snd and current_snd:playing() then
+        current_snd:stop()
+    end
+
+    if snd and snd ~= "" then
+        current_snd = xr_sound.get_safe_sound_object(snd)
+        if current_snd then
+            current_snd:play(db.actor, 0, sound_object.s2d)
+        end
+    end
+
+    local anim_time = game.play_hud_motion(2, hud_section, "anm_ea_show", false, 1.0) or 0
+
+    if kind == "open" then
+        dsh.timeout(anim_time, function()
+            if db.actor and db.actor:has_info("ui_inventory") then
+                game.play_hud_motion(2, hud_section, "anm_ea_idle", false, 1.0)
+            end
+        end)
+    end
+
+    if cam and cam ~= "" then
+        level.add_cam_effector(cam, 9543, false, "", 0, false)
+    end
+
+    return anim_time
+end
+
+function on_inventory_open()
+    if not is_backpack_anim_enabled() then
+        return
+    end
+
+    -- Skip the animation if the actor is mid-dialogue (trade/conversation
+    -- UI) when the inventory opens — playing a two-handed backpack HUD
+    -- motion on top of that doesn't make sense and isn't worth the extra
+    -- state to interrupt cleanly later. (Idea borrowed from the
+    -- "Immersive Backpacks" addon's talk-state guard.)
+    if db.actor and db.actor:is_talking() then
+        return
+    end
+
+    local active_slot = db.actor and db.actor:active_slot() or nil
+
+    slot_before_inventory_anim = resolve_restore_slot(active_slot)
+    if slot_before_inventory_anim ~= nil then
+        ogse.save_var("slot_before_inventory_anim", slot_before_inventory_anim)
+    else
+        ogse.delete_var("slot_before_inventory_anim")
+    end
+    ogse.save_var("hoc_item_anim_lock", false)
+    forced_inventory_holster = false
+    -- Removed gun holster/draw logic: no longer forces slot 255 or restores weapon slot here.
+
+    ensure_detector_model_hidden()
+    play_backpack("open")
+    dsh.timeout(100, ensure_detector_model_hidden)
+    dsh.timeout(250, ensure_detector_model_hidden)
+end
+
+function on_inventory_hide()
+    -- Always let a previously-hidden detector model reappear, even if the
+    -- feature got disabled mid-session, but don't start a new close
+    -- animation or slot-restore cycle when the feature is off.
+    restore_detector_model_if_needed()
+
+    if not is_backpack_anim_enabled() then
+        clear_inventory_restore_state()
+        return
+    end
+
+    refresh_saved_restore_slot_from_active()
+
+    if ogse.load_var_safe("hoc_skip_next_inventory_close_anim")
+        or ogse.load_var_safe("hoc_item_use_anim_pending")
+        or ogse.load_var_safe("hoc_item_anim_lock") then
+        ogse.delete_var("hoc_skip_next_inventory_close_anim")
+        restore_detector_model_if_needed()
+        -- Item-use animations own the HUD and weapon slot until they finish.
+        -- Restoring the gun here makes ogsr_items_anims wait forever for
+        -- empty hands, so only_allow_movekeys never clears.
+        if ogse.load_var_safe("hoc_item_use_anim_pending") then
+            clear_inventory_restore_state()
+        elseif forced_inventory_holster and slot_before_inventory_anim and slot_before_inventory_anim ~= 255 then
+            dsh.timeout(30, function()
+                restore_inventory_slot_if_safe(20)
+            end)
+        else
+            clear_inventory_restore_state()
+        end
+        return
+    end
+
+    local close_tm = play_backpack("close") or 450
+    restore_detector_model_if_needed()
+    dsh.timeout(close_tm, restore_detector_model_if_needed)
+    dsh.timeout(close_tm + 200, restore_detector_model_if_needed)
+    dsh.timeout(close_tm + 450, restore_detector_model_if_needed)
+
+    if forced_inventory_holster and slot_before_inventory_anim and slot_before_inventory_anim ~= 255 then
+        dsh.timeout(close_tm + 30, function()
+            restore_inventory_slot_if_safe(20)
+        end)
+    else
+        clear_inventory_restore_state()
+    end
+end
+
+local function refresh_open_idle()
+    if not db.actor or not db.actor:alive() then
+        return
+    end
+    if not db.actor:has_info("ui_inventory") then
+        return
+    end
+
+    local hud_section = pick_hud_section("open")
+    if hud_section then
+        game.play_hud_motion(2, hud_section, "anm_ea_idle", false, 1.0)
+    end
+end
+
+function on_inventory_item_changed(obj, sobj)
+    if not db.actor or not db.actor:has_info("ui_inventory") then
+        return
+    end
+
+    if not is_backpack_anim_enabled() then
+        return
+    end
+
+    -- This event means an item just moved into/out of a slot while the
+    -- inventory is open. Undo the engine's auto-equip for ANY item type
+    -- here (not just detectors) so nothing gets silently drawn into the
+    -- player's hand just because it landed in an equipment slot.
+    --
+    -- Run this *before* refreshing the saved restore slot below: if the
+    -- item already snuck into active_slot by this point, refreshing first
+    -- would overwrite slot_before_inventory_anim with that item's own
+    -- slot, leaving nothing valid to restore to.
+    local function undo_unwanted_equip()
+        local ok, err = pcall(deactivate_newly_active_item_if_needed, false)
+        if not ok then
+            log1("!hoc_backpack_inventory_anim: deactivate_newly_active_item_if_needed failed: " .. tostring(err))
+        end
+    end
+
+    undo_unwanted_equip()
+    ensure_detector_model_hidden()
+    refresh_saved_restore_slot_from_active()
+
+    -- The engine doesn't always flip active_slot to the newly-equipped item
+    -- on the same tick as this signal fires, so a single synchronous check
+    -- can miss it. Re-check a couple of times shortly after, same as
+    -- on_inventory_open does.
+    dsh.timeout(100, function()
+        undo_unwanted_equip()
+        ensure_detector_model_hidden()
+    end)
+    dsh.timeout(250, function()
+        undo_unwanted_equip()
+        ensure_detector_model_hidden()
+    end)
+    dsh.timeout(100, refresh_open_idle)
+end
+
+function attach(sm)
+     sm:subscribe({ signal = "on_inventory_open", fun = this.on_inventory_open })
+     sm:subscribe({ signal = "on_inventory_hide", fun = this.on_inventory_hide })
+     sm:subscribe({ signal = "on_item_to_slot", fun = this.on_inventory_item_changed })
+     sm:subscribe({ signal = "on_item_to_ruck", fun = this.on_inventory_item_changed })
+     sm:subscribe({ signal = "on_drop", fun = this.on_inventory_item_changed })
+end

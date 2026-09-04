@@ -16,6 +16,12 @@ Compatibility overlay for **Atmospherics 2.69 RC6.5 OGSR Edition** when used wit
 
 This does **not** include Atmospherics itself. Install Atmospherics first, then apply the compatibility patch.
 
+### Seb’s Pack Compatibility
+
+Compatibility overlay for **Seb’s Pack 19** when used with Radiophobia 3 1.20 and the updated OGSR-R3 engine.
+
+This does **not** include Seb’s Pack. Double-click `sebs-pack-compatibility\Install.bat`, or install the original pack (hiding its shaders and `bin_x64`) and apply this overlay last.
+
 ## Requirements
 
 * [Radiophobia 3 1.20](https://www.moddb.com/mods/radiophobia/downloads/radiophobia-3-ver-120)

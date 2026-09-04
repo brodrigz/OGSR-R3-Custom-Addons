@@ -1,0 +1,227 @@
+local cfg = {
+	["eat_health"]		= function(v) db.actor.health = v end,
+	["eat_power"]		= function(v) db.actor.power = v end,
+	["eat_radiation"]	= function(v) db.actor.radiation = v end,
+	["eat_satiety"]		= function(v) db.actor.satiety = v end,
+	["eat_thirst"]		= function(v) db.actor.thirst = v end,
+	["eat_alcohol"]		= function(v) db.actor.alcohol = v end,
+	["eat_psy_health"]	= function(v) db.actor.psy_health = v end,
+	["wounds_heal_perc"]= function(v) db.actor:heal_wounds( v ) end,
+}
+
+local hide_mask = false
+local disable_mask_items = {
+	"conserva",
+	"beans",
+	"salmon",
+	"bread",
+	"nuts",
+	"kolbasa",
+	"vodka",
+	"voda",
+	"pivo",
+	"energy_drink",
+	"syrok",
+	"corn",
+	"cigarette_1",
+	"cigarette_2",
+	"herkules",
+	"drug_radioprotector",
+	"drug_psy_blockade",
+	"drug_coagulant",
+}
+
+local function apply_item( sect )
+	use_item.CheckSection(sect)
+	jr_slow_med.on_item_use(sect)
+	for line, func in pairs( cfg ) do
+		local val = get_float( sect, line )
+		if val ~= 0	then
+			func(val)
+		end
+	end
+end
+
+local function respawn_item(obj)
+	obj:zero_effects()
+	alife():create( obj:section(), db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(), db.actor:id() )	   
+end
+
+local snd_in_use = false
+
+-- hoc_backpack_inventory_anim looks for these vars when inventory closes.
+-- If they are not set, it plays a close animation and may restore the
+-- weapon slot while this script is waiting for empty hands, which leaves
+-- only_allow_movekeys stuck with no HUD motion.
+local function set_hoc_item_use_pending(pending)
+	if pending then
+		ogse.save_var("hoc_skip_next_inventory_close_anim", true)
+		ogse.save_var("hoc_item_use_anim_pending", true)
+	else
+		ogse.delete_var("hoc_item_use_anim_pending")
+	end
+end
+
+local function finish_item_use(prev_slot)
+	level.only_allow_movekeys(false)
+	level.set_actor_allow_ladder(true)
+	if db.actor and prev_slot then
+		db.actor:activate_slot(prev_slot)
+	end
+	set_hoc_item_use_pending(false)
+end
+
+local function play_use_sound(sect, snd_name)
+	local snd = snd_name or get_string( sect, "snd_use" )
+	if snd then
+		if snd_in_use then
+			snd_in_use:stop()
+		end
+		snd_in_use = sound_object( snd )
+		snd_in_use:play( db.actor, 0, sound_object.s2d )
+	end
+end
+
+local function play_item_use(item)
+    local exo = nil
+    local item_hud = get_string(item, "hud")
+    local cam_effect = get_string(item, "cam_effect")
+    local used_time = get_u32(item, "item_used_timing")
+    local snd = get_string(item, "snd_use_anm")
+    local outfit = db.actor:item_in_slot(6)
+
+    if outfit then
+        exo = get_string(outfit:section(), "exo")
+        if exo and ( string.find(item, "^medkit") or item == "antirad" or string.find(item, "^stimpack") ) then
+            item_hud = get_string(item, "hud_exo")
+            used_time = get_string(item, "item_used_timing_exo")
+            snd = get_string(item, "snd_use_exo_anm")
+            cam_effect = get_string(item, "cam_effect_exo")
+        end
+    end
+	
+	if not item_hud or not used_time then
+		apply_item(item)
+		try_enable_mask()
+		set_hoc_item_use_pending(false)
+		return
+	end
+
+    local anim = (string.find(item, "^bandage") or (not exo and string.find(item, "^medkit"))) and math.random() > 0.5 and "anm_use_alt" or "anm_use"
+
+    set_hoc_item_use_pending(true)
+
+    if level.get_inventory_wnd():IsShown() then
+    	level.start_stop_menu(level.get_inventory_wnd(), true)
+    elseif level.get_car_body_wnd():IsShown() then
+    	level.start_stop_menu(level.get_car_body_wnd(), true)			
+    end
+
+    level.only_allow_movekeys(true)
+    level.set_actor_allow_ladder(false)
+
+    local prev_active_slot = db.actor:active_slot()
+    db.actor:activate_slot(255)
+	game.stop_hud_motion()
+	
+	-- seaz5150: Support for animation speed modifier.
+	local use_speed = get_string(item_hud, "use_speed")
+	if use_speed == nil then
+		use_speed = 1
+	end
+
+    local wait_start = time_global()
+    dsh.wait_condition(function()
+		return (not db.actor:active_item()) or (time_global() - wait_start > 1500)
+	end, function()
+		if snd then
+			snd_in_use = sound_object(snd)
+			snd_in_use:play(db.actor, 0, sound_object.s2d)
+		end
+
+    	local anm_start = time_global()
+		game.stop_hud_motion()
+    	local anm_duration = game.play_hud_motion(2, item_hud, anim, true, use_speed, true)
+		if not anm_duration or anm_duration <= 0 then
+			apply_item(item)
+			try_enable_mask()
+			finish_item_use(prev_active_slot)
+			return
+		end
+		if cam_effect then
+			level.add_cam_effector(cam_effect, 7538, false, "", 0, false)
+		end
+		
+    	dsh.timeout(used_time, function()
+    		apply_item(item)
+			try_enable_mask()
+    	end)
+
+    	local tmr = dsh.timeout(anm_duration, function()
+			finish_item_use(prev_active_slot)
+    	end)
+    end)
+end
+
+local function on_actor_before_use( obj, sobj )
+    local sect = obj:section()
+	
+	if sect == "matras" then return end
+	
+	if ogse.load_var_safe( "fast_use_pressed" ) then
+		ogse_screen_msg.show_message_use_item(sect)	
+		ogse.delete_var( "fast_use_pressed" )
+	end
+
+    if ui_data.load("rad3_use_anims") then
+        local hud = get_string(sect, "hud") or get_string(sect, "hud_exo")
+        local slot_was_blocked = db.actor.inventory:is_active_slot_blocked()
+        if hud and not (slot_was_blocked and not level.main_input_receiver()) and not level.only_movekeys_allowed() then
+            if db.actor:has_info("ui_inventory") then
+                set_hoc_item_use_pending(true)
+                level.start_stop_menu(level.main_input_receiver(), true)
+            end
+            obj:zero_effects()
+			try_disable_mask(sect)
+            play_item_use(sect)
+        elseif hud and db.actor:has_info("ui_talk") then -- Нужно для того что бы диалог не обрывался если мы решили выпить\перекусить с собеседником
+            play_use_sound(sect)
+        else
+            return
+        end
+    else
+		obj:zero_effects()
+        play_use_sound(sect)
+		apply_item(sect)
+    end
+end
+
+function try_disable_mask(item_section)
+	for k,v in pairs(disable_mask_items) do 
+		if v == item_section or v == string.gsub(item_section, "_bad", "") then 
+			hide_mask = true
+			hud.disable_helmet()
+			break
+		end
+	end
+end
+
+function try_enable_mask()
+	if hide_mask then
+		hud.enable_helmet()
+		hide_mask = false
+	end
+end
+
+local function animation_off()
+	level.only_allow_movekeys(false)
+	level.set_actor_allow_ladder(true)
+	game.stop_hud_motion()
+	hide_mask = false
+	set_hoc_item_use_pending(false)
+end
+
+function attach( sm )
+	sm:subscribe({ signal = "on_actor_before_use", fun = on_actor_before_use })
+	sm:subscribe({ signal = "on_first_update",     fun = animation_off })
+end
