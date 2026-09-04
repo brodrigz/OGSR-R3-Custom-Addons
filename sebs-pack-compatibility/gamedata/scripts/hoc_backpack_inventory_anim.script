@@ -482,10 +482,6 @@ function on_inventory_item_changed(obj, sobj)
     ensure_detector_model_hidden()
     refresh_saved_restore_slot_from_active()
 
-    -- The engine doesn't always flip active_slot to the newly-equipped item
-    -- on the same tick as this signal fires, so a single synchronous check
-    -- can miss it. Re-check a couple of times shortly after, same as
-    -- on_inventory_open does.
     dsh.timeout(100, function()
         undo_unwanted_equip()
         ensure_detector_model_hidden()

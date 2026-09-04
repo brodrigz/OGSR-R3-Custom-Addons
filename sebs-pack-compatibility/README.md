@@ -41,6 +41,8 @@ applies this overlay, then inserts Seb’s safe modules into the existing
   backpack HUD entries stay; that file is not skipped wholesale)
 - Backpack HUD vs item-use: `ogsr_items_anims` tells the backpack to skip
   its close/restore so eating from inventory cannot leave `only_allow_movekeys` stuck
+- Detector HUD is not started or hidden with a clip while inventory is open
+  (engine). Toggle it after closing.
 
 Laser gadgets stay off until a later engine rebase. Fakelens still loads; its
 alt-aim Lua signal is idle without the removed engine callback.
